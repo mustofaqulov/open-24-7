@@ -1,0 +1,40 @@
+{
+  "name": "open24",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --exclude tests/e2e/**",
+    "test:e2e": "playwright test",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:dev": "prisma migrate dev",
+    "data:import:qarshi": "node --env-file=.env scripts/import-osm.cjs",
+    "maintenance": "node --env-file=.env scripts/maintenance.cjs"
+  },
+  "dependencies": {
+    "@prisma/client": "5.20.0",
+    "bcryptjs": "3.0.3",
+    "leaflet": "1.9.4",
+    "lucide-react": "1.54.0",
+    "next": "16.3.7",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0",
+    "@tailwindcss/postcss": "4.3.3",
+    "@types/leaflet": "1.9.20",
+    "@types/node": "26.6.4",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "prisma": "5.20.0",
+    "tailwindcss": "4.3.3",
+    "typescript": "5.9.3",
+    "vitest": "5.0.2"
+  }
+}

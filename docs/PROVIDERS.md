@@ -1,0 +1,44 @@
+# Provider decision and costs
+
+Reviewed 12 October 2026. Recheck official terms and prices before enabling billing.
+
+## Selected services
+
+| Need                 | Provider                                                                     | Reason                                                                                                                                                                                                                                                                            |
+| -------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Interactive base map | Leaflet over OpenStreetMap raster tiles; Google Maps JavaScript API optional | Works with no key, no billing, and no commercial clearance, so the map is available while the Google terms question below stays open. Tiles are lazy loaded, attribution is always shown, and the list fallback remains. Google can be switched on later with the approval flags. |
+| Routes               | Google Routes API Compute Routes Essentials                                  | Requested on demand only; the same [coverage table](https://developers.google.com/maps/coverage) lists driving and walking directions for Uzbekistan. A live Qarshi route has not been verified.                                                                                  |
+| Device position      | Browser Geolocation API                                                      | No Google Geolocation API cost; used only after a visitor clicks the location button.                                                                                                                                                                                             |
+| Business search      | PostGIS over moderated owner submissions or optionally imported OSM records  | Business records remain independent of Google Maps content. OSM imports are never marked open from OSM hours alone.                                                                                                                                                               |
+| Manual location      | Four city centre choices, map click, and optional Nominatim address search   | Address search uses an operator-controlled or contracted Nominatim endpoint. Without one, city and map choices remain available.                                                                                                                                                  |
+
+The provider interfaces live in `src/lib/providers.ts`. Google Routes and Nominatim geocoding adapters are implemented. The `PlaceProvider` contract remains unimplemented; local PostGIS records supply place search. Nominatim address search is **unavailable until `NOMINATIM_BASE_URL` is configured and tested**. Google Places is intentionally disabled because Google’s places content cannot be stored as a local directory and would add a paid SKU. The OSM import is a controlled operator job, not an on-demand public API.
+
+## Base map tiles
+
+Reviewed 16 October 2026. The default interactive map is [Leaflet](https://leafletjs.com/) with raster tiles. It needs no key, no billed account, and no commercial clearance, so the map works in every environment while the Google decision below stays unresolved. Leaflet is BSD-2-Clause licensed and ships in the application bundle rather than from a CDN.
+
+Without configuration the tiles come from the public OpenStreetMap servers. Their [tile usage policy](https://operations.osmfoundation.org/policies/tiles/) forbids heavy or commercial use, requires visible attribution, and allows the servers to be withdrawn at any time, so this default is for development and small-scale evaluation only. Before public traffic, set `NEXT_PUBLIC_MAP_TILE_URL` to a self-hosted or contracted tile service and `NEXT_PUBLIC_MAP_TILE_ATTRIBUTION` to the attribution it requires. The attribution control stays visible in both cases, and the configured tile origin is added to the Content Security Policy automatically.
+
+Tiles are requested only after the map scrolls into view, and no map data is persisted. Drawing Google route data on a non Google map is not permitted by the [Routes policies](https://developers.google.com/maps/documentation/routes/policies), so an operator who enables Google Routes must also enable the Google base map through the approval flags. With those flags off, routes stay disabled and only the OpenStreetMap base map is used.
+
+## Google pricing and controls
+
+Google’s [global pricing list](https://developers.google.com/maps/billing-and-pricing/pricing) lists Dynamic Maps at 10,000 free monthly map loads, then $7 per 1,000 in the first paid tier. Routes Compute Routes Essentials is listed at 10,000 free monthly requests, then $5 per 1,000 in the first paid tier. These are USD list prices and may change; account billing, taxes, regional terms, and other SKUs may differ. The application does not request traffic-aware routes, route matrices, or Places. Google requires a billed project and restricted API keys for production; see its [Maps JavaScript setup](https://developers.google.com/maps/documentation/javascript/get-api-key?hl=en&setupProd=configure).
+
+Set a browser key restricted to exact HTTPS referrers and Maps JavaScript API. Set a separate server key restricted to Routes API and to outbound server IPs where possible. Set Google Cloud quotas, billing alerts, and a budget. Alerts are not a hard spending cap. The app also limits each source IP to 15 route requests per 15-minute bucket and never prefetches routes. Google route responses are neither cached nor stored. The [Routes policies](https://developers.google.com/maps/documentation/routes/policies) require routes drawn on a map to be shown on a Google map and impose caching and attribution limits.
+
+**Commercial use review is mandatory.** The current [Google Maps Platform Terms](https://cloud.google.com/maps-platform/terms) contain examples restricting use of Core Services in listings or directory services and linking a Google map to non Google content. Open24 is a directory whose records can include OSM data. We cannot conclude that the standard terms permit this combination. The Google integration is therefore disabled unless the operator explicitly sets the approval flags after obtaining suitable contractual or legal clearance. If clearance is unavailable, use a separately licensed map and routing provider instead of turning these flags on.
+
+## OpenStreetMap
+
+OSM business data is under the [Open Database License](https://www.openstreetmap.org/copyright). Attribution and possible share alike obligations apply to the resulting database. The import script requires `OVERPASS_URL` for an operator-controlled or contracted endpoint, uses a fixed Qarshi-area query, and stores external IDs to avoid repeated imports. It does not use the public Nominatim service. Public Overpass servers are shared, can be overloaded, and have their own usage policies; see the [OSM Overpass overview](https://wiki.openstreetmap.org/wiki/Overpass_API). Business coordinates and addresses are reviewed before publication. No OSM opening-hours tag is treated as verified status.
+
+The address adapter uses the documented [Nominatim search](https://nominatim.org/release-docs/latest/api/Search/) and [reverse](https://nominatim.org/release-docs/latest/api/Reverse/) APIs. Configure `NOMINATIM_BASE_URL` only for a self-hosted or contracted HTTPS endpoint. `GEOCODING_COUNTRY_CODES` defaults to `uz` and can be expanded as licensed coverage grows. The application rejects `nominatim.openstreetmap.org`: the [public service policy](https://operations.osmfoundation.org/policies/nominatim/) imposes a one-request-per-second ceiling and other conditions. Queries are sent only after a visitor submits an address; results are not cached or persisted by Open24. The API limits callers to ten requests per fifteen minutes per source IP. Local Uzbek address quality is unverified.
+
+## Known provider limits
+
+- Qarshi business coverage, local address quality, and route accuracy remain unverified without live credentials and field testing.
+- A public map does not prove that business hours are accurate. Owners and moderators must maintain freshness.
+- Walking routes may omit sidewalks or pedestrian paths; the UI displays that warning when a walking route is returned.
+- OSM imports can create duplicate candidates with owner submissions. Moderators must reconcile them manually; automatic duplicate resolution is not implemented.

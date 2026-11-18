@@ -1,0 +1,12 @@
+node_modules
+.next
+.env
+.env.local
+*.log
+coverage
+playwright-report
+test-results
+.tools
+open24-api.exe
+open24-migrate.exe
+*.test.exe

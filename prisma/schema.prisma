@@ -1,0 +1,197 @@
+generator client {
+ provider = "prisma-client-js"
+}
+datasource db {
+ provider = "postgresql"
+ url = env("DATABASE_URL")
+}
+
+enum Role {
+ USER
+ OWNER
+ MODERATOR
+ ADMIN
+}
+enum Verification {
+ PENDING
+ VERIFIED
+ REJECTED
+}
+enum ReportState {
+ PENDING
+ RESOLVED
+ REJECTED
+}
+enum HoursSource {
+ OWNER
+ VERIFIED_SOURCE
+ OSM
+ UNVERIFIED
+}
+
+model User {
+ id String @id @default(uuid()) @db.Uuid
+ email String @unique
+ passwordHash String @map("password_hash")
+ displayName String @map("display_name")
+ role Role @default(USER)
+ locale String @default("uz")
+ createdAt DateTime @default(now()) @map("created_at")
+ updatedAt DateTime @updatedAt @map("updated_at")
+ sessions Session[]
+ favorites Favorite[]
+ ownerships Ownership[]
+ reports Report[]
+ @@map("users")
+}
+model Session {
+ id String @id @default(uuid()) @db.Uuid
+ tokenHash String @unique @map("token_hash")
+ userId String @db.Uuid @map("user_id")
+ expiresAt DateTime @map("expires_at")
+ createdAt DateTime @default(now()) @map("created_at")
+ user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+ @@index([userId])
+ @@map("sessions")
+}
+model Category {
+ id String @id @default(uuid()) @db.Uuid
+ key String @unique
+ nameUz String @map("name_uz")
+ nameEn String @map("name_en")
+ nameRu String @map("name_ru")
+ parentId String? @db.Uuid @map("parent_id")
+ parent Category? @relation("CategoryTree",fields:[parentId],references:[id])
+ children Category[] @relation("CategoryTree")
+ businesses Business[]
+ translations CategoryTranslation[]
+ @@map("categories")
+}
+model CategoryTranslation {
+ categoryId String @db.Uuid @map("category_id")
+ locale String
+ name String
+ category Category @relation(fields:[categoryId],references:[id],onDelete:Cascade)
+ @@id([categoryId,locale])
+ @@map("category_translations")
+}
+model Business {
+ id String @id @default(uuid()) @db.Uuid
+ name String
+ slug String @unique
+ description String?
+ categoryId String @db.Uuid @map("category_id")
+ address String
+ city String
+ district String?
+ countryCode String @default("UZ") @map("country_code")
+ latitude Float
+ longitude Float
+ timezone String @default("Asia/Tashkent")
+ phone String?
+ website String?
+ verification Verification @default(PENDING)
+ temporarilyClosed Boolean @default(false) @map("temporarily_closed")
+ hoursSource HoursSource @default(UNVERIFIED) @map("hours_source")
+ hoursVerifiedAt DateTime? @map("hours_verified_at")
+ createdAt DateTime @default(now()) @map("created_at")
+ updatedAt DateTime @updatedAt @map("updated_at")
+ category Category @relation(fields:[categoryId],references:[id])
+ hours BusinessHour[]
+ exceptions BusinessHourException[]
+ ownerships Ownership[]
+ favorites Favorite[]
+ reports Report[]
+ sources BusinessSource[]
+ @@index([categoryId,city])
+ @@index([verification])
+ @@map("businesses")
+}
+model BusinessHour {
+ id String @id @default(uuid()) @db.Uuid
+ businessId String @db.Uuid @map("business_id")
+ weekday Int
+ openMinute Int @map("open_minute")
+ closeMinute Int @map("close_minute")
+ isClosed Boolean @default(false) @map("is_closed")
+ validFrom DateTime? @db.Date @map("valid_from")
+ validTo DateTime? @db.Date @map("valid_to")
+ business Business @relation(fields:[businessId],references:[id],onDelete:Cascade)
+ @@index([businessId,weekday])
+ @@map("business_hours")
+}
+model BusinessHourException {
+ id String @id @default(uuid()) @db.Uuid
+ businessId String @db.Uuid @map("business_id")
+ localDate String @map("local_date")
+ openMinute Int @map("open_minute")
+ closeMinute Int @map("close_minute")
+ isClosed Boolean @default(false) @map("is_closed")
+ business Business @relation(fields:[businessId],references:[id],onDelete:Cascade)
+ @@index([businessId,localDate])
+ @@map("business_hour_exceptions")
+}
+model Ownership {
+ id String @id @default(uuid()) @db.Uuid
+ userId String @db.Uuid @map("user_id")
+ businessId String @db.Uuid @map("business_id")
+ evidence String?
+ status Verification @default(PENDING)
+ createdAt DateTime @default(now()) @map("created_at")
+ user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+ business Business @relation(fields:[businessId],references:[id],onDelete:Cascade)
+ @@unique([userId,businessId])
+ @@map("ownerships")
+}
+model Favorite {
+ userId String @db.Uuid @map("user_id")
+ businessId String @db.Uuid @map("business_id")
+ createdAt DateTime @default(now()) @map("created_at")
+ user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+ business Business @relation(fields:[businessId],references:[id],onDelete:Cascade)
+ @@id([userId,businessId])
+ @@map("favorites")
+}
+model Report {
+ id String @id @default(uuid()) @db.Uuid
+ userId String? @db.Uuid @map("user_id")
+ businessId String @db.Uuid @map("business_id")
+ kind String
+ details String
+ state ReportState @default(PENDING)
+ createdAt DateTime @default(now()) @map("created_at")
+ user User? @relation(fields:[userId],references:[id],onDelete:SetNull)
+ business Business @relation(fields:[businessId],references:[id],onDelete:Cascade)
+ @@index([state,createdAt])
+ @@map("reports")
+}
+model BusinessSource {
+ id String @id @default(uuid()) @db.Uuid
+ businessId String @db.Uuid @map("business_id")
+ provider String
+ externalId String @map("external_id")
+ lastSyncedAt DateTime @default(now()) @map("last_synced_at")
+ business Business @relation(fields:[businessId],references:[id],onDelete:Cascade)
+ @@unique([provider,externalId])
+ @@map("business_sources")
+}
+model AuditLog {
+ id String @id @default(uuid()) @db.Uuid
+ actorId String? @db.Uuid @map("actor_id")
+ action String
+ resourceType String @map("resource_type")
+ resourceId String @map("resource_id")
+ metadata Json?
+ createdAt DateTime @default(now()) @map("created_at")
+ @@index([createdAt])
+ @@map("audit_logs")
+}
+model ContactMessage {
+ id String @id @default(uuid()) @db.Uuid
+ email String
+ name String
+ message String
+ createdAt DateTime @default(now()) @map("created_at")
+ @@index([createdAt])
+ @@map("contact_messages")
+}

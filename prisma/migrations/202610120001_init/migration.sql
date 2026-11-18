@@ -1,0 +1,33 @@
+CREATE EXTENSION IF NOT EXISTS postgis;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE TYPE "Role" AS ENUM ('USER','OWNER','MODERATOR','ADMIN');
+CREATE TYPE "Verification" AS ENUM ('PENDING','VERIFIED','REJECTED');
+CREATE TYPE "ReportState" AS ENUM ('PENDING','RESOLVED','REJECTED');
+CREATE TYPE "HoursSource" AS ENUM ('OWNER','VERIFIED_SOURCE','OSM','UNVERIFIED');
+CREATE TABLE categories (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), key text NOT NULL UNIQUE, name_uz text NOT NULL, name_en text NOT NULL, name_ru text NOT NULL, parent_id uuid REFERENCES categories(id));
+CREATE TABLE category_translations (category_id uuid NOT NULL REFERENCES categories(id) ON DELETE CASCADE, locale text NOT NULL, name text NOT NULL, PRIMARY KEY(category_id,locale));
+CREATE TABLE users (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), email text NOT NULL UNIQUE, password_hash text NOT NULL, display_name text NOT NULL, role "Role" NOT NULL DEFAULT 'USER', locale text NOT NULL DEFAULT 'uz', created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE sessions (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), token_hash text NOT NULL UNIQUE, user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires_at timestamptz NOT NULL, created_at timestamptz NOT NULL DEFAULT now());
+CREATE INDEX sessions_user_id_idx ON sessions(user_id);
+CREATE TABLE businesses (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), name text NOT NULL, slug text NOT NULL UNIQUE, description text, category_id uuid NOT NULL REFERENCES categories(id), address text NOT NULL, city text NOT NULL, district text, country_code text NOT NULL DEFAULT 'UZ', latitude double precision NOT NULL CHECK (latitude BETWEEN -90 AND 90), longitude double precision NOT NULL CHECK (longitude BETWEEN -180 AND 180), timezone text NOT NULL DEFAULT 'Asia/Tashkent', phone text, website text, verification "Verification" NOT NULL DEFAULT 'PENDING', temporarily_closed boolean NOT NULL DEFAULT false, hours_source "HoursSource" NOT NULL DEFAULT 'UNVERIFIED', hours_verified_at timestamptz, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now());
+CREATE INDEX businesses_category_id_city_idx ON businesses(category_id,city);
+CREATE INDEX businesses_verification_idx ON businesses(verification);
+CREATE INDEX businesses_location_gix ON businesses USING gist ((ST_SetSRID(ST_MakePoint(longitude,latitude),4326)::geography));
+CREATE INDEX businesses_name_trgm_idx ON businesses USING gin (name gin_trgm_ops);
+CREATE TABLE business_hours (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), business_id uuid NOT NULL REFERENCES businesses(id) ON DELETE CASCADE, weekday integer NOT NULL CHECK (weekday BETWEEN 0 AND 6), open_minute integer NOT NULL CHECK (open_minute BETWEEN 0 AND 1439), close_minute integer NOT NULL CHECK (close_minute BETWEEN 0 AND 1440), is_closed boolean NOT NULL DEFAULT false, valid_from date, valid_to date, CHECK (valid_from IS NULL OR valid_to IS NULL OR valid_from <= valid_to));
+CREATE INDEX business_hours_business_id_weekday_idx ON business_hours(business_id,weekday);
+CREATE TABLE ownerships (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE, business_id uuid NOT NULL REFERENCES businesses(id) ON DELETE CASCADE, evidence text, status "Verification" NOT NULL DEFAULT 'PENDING', created_at timestamptz NOT NULL DEFAULT now(), UNIQUE(user_id,business_id));
+CREATE TABLE favorites (user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE, business_id uuid NOT NULL REFERENCES businesses(id) ON DELETE CASCADE, created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(user_id,business_id));
+CREATE TABLE reports (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid REFERENCES users(id) ON DELETE SET NULL, business_id uuid NOT NULL REFERENCES businesses(id) ON DELETE CASCADE, kind text NOT NULL, details text NOT NULL, state "ReportState" NOT NULL DEFAULT 'PENDING', created_at timestamptz NOT NULL DEFAULT now());
+CREATE INDEX reports_state_created_at_idx ON reports(state,created_at);
+CREATE TABLE business_sources (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), business_id uuid NOT NULL REFERENCES businesses(id) ON DELETE CASCADE, provider text NOT NULL, external_id text NOT NULL, last_synced_at timestamptz NOT NULL DEFAULT now(), UNIQUE(provider,external_id));
+CREATE TABLE audit_logs (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), actor_id uuid, action text NOT NULL, resource_type text NOT NULL, resource_id text NOT NULL, metadata jsonb, created_at timestamptz NOT NULL DEFAULT now());
+CREATE INDEX audit_logs_created_at_idx ON audit_logs(created_at);
+CREATE TABLE rate_limits (key text NOT NULL, bucket timestamptz NOT NULL, count integer NOT NULL DEFAULT 1, PRIMARY KEY(key,bucket));
+CREATE TABLE contact_messages (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), email text NOT NULL, name text NOT NULL, message text NOT NULL, created_at timestamptz NOT NULL DEFAULT now());
+CREATE INDEX contact_messages_created_at_idx ON contact_messages(created_at);
+INSERT INTO categories (key,name_uz,name_en,name_ru) VALUES
+('pharmacy','Dorixonalar','Pharmacies','Аптеки'),('grocery','Oziq-ovqat doʻkonlari','Grocery stores','Продуктовые магазины'),('restaurant','Restoranlar','Restaurants','Рестораны'),('fuel','Yoqilgʻi shoxobchalari','Gas stations','АЗС'),('atm','Bankomatlar','ATMs','Банкоматы'),('medical','Tibbiy xizmatlar','Medical services','Медицинские услуги'),('hotel','Mehmonxonalar','Hotels','Отели'),('repair','Avtoservis','Car repair','Автосервис'),('bakery','Nonvoyxonalar','Bakeries','Пекарни'),('cafe','Kafelar','Cafes','Кафе'),('convenience','Kichik doʻkonlar','Convenience stores','Мини-маркеты');
+INSERT INTO category_translations(category_id,locale,name)
+SELECT id,'uz',name_uz FROM categories UNION ALL SELECT id,'en',name_en FROM categories UNION ALL SELECT id,'ru',name_ru FROM categories;
